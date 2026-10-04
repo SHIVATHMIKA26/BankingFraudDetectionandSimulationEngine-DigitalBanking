@@ -12,6 +12,7 @@ import AuditLogsView from './AuditLogsView';
 import SettingsView from './SettingsView';
 import Chatbot from './Chatbot';
 import axios from 'axios';
+import React, { useEffect, useCallback } from "react";
 
 const Dashboard = ({ userEmail, userRole, onLogout }) => {
   const [activeSection, setActiveSection] = useState('Dashboard');
@@ -52,12 +53,21 @@ const Dashboard = ({ userEmail, userRole, onLogout }) => {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
-  }, []);
+ const fetchData = useCallback(async () => {
+  // Keep your existing fetchData logic here
+}, []); // Add actual dependencies if needed
 
+useEffect(() => {
+  fetchData();
+
+  const interval = setInterval(fetchData, 10000);
+
+  return () => clearInterval(interval);
+}, [fetchData]);
+
+const handleNavigate = (section) => {
+  setActiveSection(section);
+};
   const handleNavigate = (section) => {
     setActiveSection(section);
   };
