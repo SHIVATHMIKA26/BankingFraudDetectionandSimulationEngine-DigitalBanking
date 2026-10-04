@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 const SimulationView = ({ onRunBatch, onRunSingle, isStreaming, onToggleStream }) => {
   const [scenario, setScenario] = useState('Mixed (Normal + Fraud)');
   const [batchSize, setBatchSize] = useState(50);
-  const [fraudRatio, setFraudRatio] = useState(15);
+  const [fraudRatio] = useState(0.25);
   const [maxAmount, setMaxAmount] = useState(10000);
   const [rules, setRules] = useState({ geo: true, velocity: true });
 
