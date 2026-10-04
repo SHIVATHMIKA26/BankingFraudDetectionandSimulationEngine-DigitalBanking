@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -13,6 +14,9 @@ import SettingsView from './SettingsView';
 import Chatbot from './Chatbot';
 import axios from 'axios';
 
+const API_URL =
+  process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const Dashboard = ({ userEmail, userRole, onLogout }) => {
   const [activeSection, setActiveSection] = useState('Dashboard');
   const [transactions, setTransactions] = useState([]);
@@ -23,10 +27,8 @@ const Dashboard = ({ userEmail, userRole, onLogout }) => {
   const [backendStats, setBackendStats] = useState(null);
   const [highContrast, setHighContrast] = useState(false);
 
-  const API_URL = "http://localhost:5000";
-
   // Fetch data from MySQL via Backend on mount and periodic refresh
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const statsRes = await axios.get(`${API_URL}/stats`);
       setBackendStats(statsRes.data);
@@ -35,52 +37,74 @@ const Dashboard = ({ userEmail, userRole, onLogout }) => {
       setTransactions(txnRes.data);
 
       // Only fetch audit logs for Admins
-      const currentRole = userRole || localStorage.getItem('userRole');
-      const currentEmail = userEmail || localStorage.getItem('userEmail');
-      const isAdmin = currentRole?.toLowerCase() === 'admin' || 
-                      ['shivathmika45@gmail.com', 'shivathmikaboddupally890@gmail.com', 'shiv@gmail.com'].includes(currentEmail?.toLowerCase());
+      const currentRole =
+        userRole || localStorage.getItem('userRole');
+
+      const currentEmail =
+        userEmail || localStorage.getItem('userEmail');
+
+      const isAdmin =
+        currentRole?.toLowerCase() === 'admin' ||
+        [
+          'shivathmika45@gmail.com',
+          'shivathmikaboddupally890@gmail.com',
+          'shiv@gmail.com'
+        ].includes(currentEmail?.toLowerCase());
 
       if (isAdmin) {
         const auditRes = await axios.get(`${API_URL}/auditLogs`);
         setAuditLogs(auditRes.data);
       }
-      
-      // NOTE: Alerts are now only triggered by user actions (Run Batch / Run Single)
+
+      // Alerts are triggered only by user actions
       // to avoid re-alerting on old database records.
     } catch (err) {
-      console.error("Error fetching from MySQL backend:", err);
+      console.error(
+        'Error fetching from MySQL backend:',
+        err
+      );
     }
-  };
+  }, [userRole, userEmail]);
 
- const fetchData = useCallback(async () => {
-  // Keep your existing fetchData logic here
-}, []); // Add actual dependencies if needed
+  // Initial fetch and periodic refresh
+  useEffect(() => {
+    fetchData();
 
-useEffect(() => {
-  fetchData();
+    const interval = setInterval(fetchData, 10000);
 
-  const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
-  return () => clearInterval(interval);
-}, [fetchData]);
-
-const handleNavigate = (section) => {
-  setActiveSection(section);
-};
   const handleNavigate = (section) => {
     setActiveSection(section);
   };
 
+  // Batch transaction simulation
   const handleRunBatch = async (params) => {
     try {
-      const res = await axios.post(`${API_URL}/mlBatchCheck`, { ...params, userEmail });
+      const res = await axios.post(
+        `${API_URL}/mlBatchCheck`,
+        {
+          ...params,
+          userEmail
+        }
+      );
+
       const newTxns = res.data;
-      
+
       // Trigger alerts for any fraud in this batch
-      const newAlerts = newTxns.filter(t => t.status !== 'approved');
+      const newAlerts = newTxns.filter(
+        t => t.status !== 'approved'
+      );
+
       if (newAlerts.length > 0) {
-        setAlerts(prev => [...newAlerts, ...prev].slice(0, 20));
-        setMailCount(prev => prev + newAlerts.length);
+        setAlerts(prev =>
+          [...newAlerts, ...prev].slice(0, 20)
+        );
+
+        setMailCount(prev =>
+          prev + newAlerts.length
+        );
       }
 
       // Refresh data
@@ -88,43 +112,59 @@ const handleNavigate = (section) => {
         fetchData();
         setActiveSection('Transactions');
       }, 500);
+
     } catch (err) {
-      console.error("Batch Simulation Error:", err);
+      console.error('Batch Simulation Error:', err);
     }
   };
 
-  const handleRunSingle = async (data, isStream = false) => {
-    try {
-      // Connect to REAL ML Backend API which saves to MySQL
-      const payload = {
-        amount: parseFloat(data.amount),
-        is_night: data.isNight ? 1 : 0,
-        location: data.location,
-        merchant: data.merchant,
-        location_risk: data.locationRisk ? 1 : 0, 
-        merchant_risk: data.merchantRisk ? 1 : 0,
-        velocity_flag: data.velocityRisk ? 1 : 0,
-        userEmail: userEmail
-      };
+  // Single transaction fraud detection
+  const handleRunSingle = useCallback(
+    async (data, isStream = false) => {
+      try {
+        // Connect to ML backend API which saves to MySQL
+        const payload = {
+          amount: parseFloat(data.amount),
+          is_night: data.isNight ? 1 : 0,
+          location: data.location,
+          merchant: data.merchant,
+          location_risk: data.locationRisk ? 1 : 0,
+          merchant_risk: data.merchantRisk ? 1 : 0,
+          velocity_flag: data.velocityRisk ? 1 : 0,
+          userEmail: userEmail
+        };
 
-      const res = await axios.post(`${API_URL}/mlFraudCheck`, payload);
-      const newTxn = res.data;
+        const res = await axios.post(
+          `${API_URL}/mlFraudCheck`,
+          payload
+        );
 
-      // Trigger alert if fraud
-      if (newTxn.status !== 'approved') {
-        setAlerts(prev => [newTxn, ...prev].slice(0, 20));
-        setMailCount(prev => prev + 1);
+        const newTxn = res.data;
+
+        // Trigger alert if fraud
+        if (newTxn.status !== 'approved') {
+          setAlerts(prev =>
+            [newTxn, ...prev].slice(0, 20)
+          );
+
+          setMailCount(prev => prev + 1);
+        }
+
+        // Wait for DB commit
+        setTimeout(() => {
+          fetchData();
+
+          if (!isStream) {
+            setActiveSection('Transactions');
+          }
+        }, 500);
+
+      } catch (err) {
+        console.error('ML API Error:', err);
       }
-      
-      // Wait a bit for DB to commit
-      setTimeout(() => {
-        fetchData();
-        if (!isStream) setActiveSection('Transactions');
-      }, 500);
-    } catch (err) {
-      console.error("ML API Error:", err);
-    }
-  };
+    },
+    [userEmail, fetchData]
+  );
 
   const handleToggleStream = () => {
     setIsStreaming(!isStreaming);
@@ -132,27 +172,48 @@ const handleNavigate = (section) => {
 
   // Real-Time Streaming Interval
   useEffect(() => {
-    let interval;
-    if (isStreaming) {
-      interval = setInterval(() => {
-        const merchants = ['Amazon', 'Apple Store', 'Netflix', 'Starbucks', 'Uber', 'Unknown Vendor'];
-        const locations = ['New York, US', 'London, UK', 'Dubai, AE', 'Paris, FR', 'Singapore, SG', 'Moscow, RU'];
-        
-        const randomTxn = {
-          amount: Math.floor(Math.random() * 15000) + 50,
-          merchant: merchants[Math.floor(Math.random() * merchants.length)],
-          location: locations[Math.floor(Math.random() * locations.length)],
-          isNight: Math.random() > 0.7,
-          locationRisk: Math.random() > 0.85,
-          merchantRisk: Math.random() > 0.9,
-          velocityRisk: Math.random() > 0.8
-        };
-        
-        handleRunSingle(randomTxn, true);
-      }, 5000); // New random transaction every 5 seconds
-    }
+    if (!isStreaming) return;
+
+    const interval = setInterval(() => {
+      const merchants = [
+        'Amazon',
+        'Apple Store',
+        'Netflix',
+        'Starbucks',
+        'Uber',
+        'Unknown Vendor'
+      ];
+
+      const locations = [
+        'New York, US',
+        'London, UK',
+        'Dubai, AE',
+        'Paris, FR',
+        'Singapore, SG',
+        'Moscow, RU'
+      ];
+
+      const randomTxn = {
+        amount: Math.floor(Math.random() * 15000) + 50,
+        merchant:
+          merchants[
+            Math.floor(Math.random() * merchants.length)
+          ],
+        location:
+          locations[
+            Math.floor(Math.random() * locations.length)
+          ],
+        isNight: Math.random() > 0.7,
+        locationRisk: Math.random() > 0.85,
+        merchantRisk: Math.random() > 0.9,
+        velocityRisk: Math.random() > 0.8
+      };
+
+      handleRunSingle(randomTxn, true);
+    }, 5000);
+
     return () => clearInterval(interval);
-  }, [isStreaming, userEmail]);
+  }, [isStreaming, handleRunSingle]);
 
   const handleClearAlerts = () => {
     setAlerts([]);
@@ -162,69 +223,187 @@ const handleNavigate = (section) => {
     setMailCount(0);
   };
 
+  // Render dashboard content
   const renderContent = () => {
-    const currentRole = userRole || localStorage.getItem('userRole');
-    const currentEmail = userEmail || localStorage.getItem('userEmail');
-    const isAdmin = currentRole?.toLowerCase() === 'admin' || 
-                    ['shivathmika45@gmail.com', 'shivathmikaboddupally890@gmail.com', 'admin@gmail.com'].includes(currentEmail?.toLowerCase());
+    const currentRole =
+      userRole || localStorage.getItem('userRole');
+
+    const currentEmail =
+      userEmail || localStorage.getItem('userEmail');
+
+    const isAdmin =
+      currentRole?.toLowerCase() === 'admin' ||
+      [
+        'shivathmika45@gmail.com',
+        'shivathmikaboddupally890@gmail.com',
+        'admin@gmail.com'
+      ].includes(currentEmail?.toLowerCase());
 
     switch (activeSection) {
       case 'Dashboard':
-        return <DashboardView transactions={transactions} alerts={alerts} onClearAlerts={handleClearAlerts} stats={backendStats} highContrast={highContrast} />;
+        return (
+          <DashboardView
+            transactions={transactions}
+            alerts={alerts}
+            onClearAlerts={handleClearAlerts}
+            stats={backendStats}
+            highContrast={highContrast}
+          />
+        );
+
       case 'Simulation':
-        return <SimulationView onRunBatch={handleRunBatch} onRunSingle={handleRunSingle} isStreaming={isStreaming} onToggleStream={handleToggleStream} highContrast={highContrast} />;
+        return (
+          <SimulationView
+            onRunBatch={handleRunBatch}
+            onRunSingle={handleRunSingle}
+            isStreaming={isStreaming}
+            onToggleStream={handleToggleStream}
+            highContrast={highContrast}
+          />
+        );
+
       case 'Detection':
-        return <DetectionView highContrast={highContrast} />;
+        return (
+          <DetectionView
+            highContrast={highContrast}
+          />
+        );
+
       case 'Analytics':
         return (
           <div style={{ padding: '2rem' }}>
-            <MLModelStatus stats={backendStats} highContrast={highContrast} />
-            <ModelDetails stats={backendStats} highContrast={highContrast} />
-            <MLPerformanceChart highContrast={highContrast} />
+            <MLModelStatus
+              stats={backendStats}
+              highContrast={highContrast}
+            />
+
+            <ModelDetails
+              stats={backendStats}
+              highContrast={highContrast}
+            />
+
+            <MLPerformanceChart
+              highContrast={highContrast}
+            />
           </div>
         );
+
       case 'Transactions':
-        return <TransactionsView transactions={transactions} />;
+        return (
+          <TransactionsView
+            transactions={transactions}
+          />
+        );
+
       case 'Audit Logs':
-        // Double check role even for rendering
-        return isAdmin ? 
-          <AuditLogsView auditLogs={auditLogs} /> : 
-          <DashboardView transactions={transactions} alerts={alerts} onClearAlerts={handleClearAlerts} stats={backendStats} highContrast={highContrast} />;
+        // Double-check role even for rendering
+        return isAdmin ? (
+          <AuditLogsView
+            auditLogs={auditLogs}
+          />
+        ) : (
+          <DashboardView
+            transactions={transactions}
+            alerts={alerts}
+            onClearAlerts={handleClearAlerts}
+            stats={backendStats}
+            highContrast={highContrast}
+          />
+        );
+
       case 'Settings':
-        // Pass userEmail for Admin management and check role
-        return isAdmin ? 
-          <SettingsView highContrast={highContrast} userEmail={userEmail} /> : 
-          <DashboardView transactions={transactions} alerts={alerts} onClearAlerts={handleClearAlerts} stats={backendStats} highContrast={highContrast} />;
+        // Admin management and role check
+        return isAdmin ? (
+          <SettingsView
+            highContrast={highContrast}
+            userEmail={userEmail}
+          />
+        ) : (
+          <DashboardView
+            transactions={transactions}
+            alerts={alerts}
+            onClearAlerts={handleClearAlerts}
+            stats={backendStats}
+            highContrast={highContrast}
+          />
+        );
+
       default:
-        return <DashboardView transactions={transactions} alerts={alerts} onClearAlerts={handleClearAlerts} stats={backendStats} highContrast={highContrast} />;
+        return (
+          <DashboardView
+            transactions={transactions}
+            alerts={alerts}
+            onClearAlerts={handleClearAlerts}
+            stats={backendStats}
+            highContrast={highContrast}
+          />
+        );
     }
   };
 
-  const bgGradient = highContrast 
-    ? 'black' 
+  const bgGradient = highContrast
+    ? 'black'
     : 'radial-gradient(circle at top left, #2d0b3a, #0f172a 70%)';
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: bgGradient, color: 'white', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
-      <Sidebar activeSection={activeSection} onNavigate={handleNavigate} userEmail={userEmail} userRole={userRole} onLogout={onLogout} highContrast={highContrast} />
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', position: 'relative' }}>
-        <Header 
-          activeSection={activeSection} 
-          alerts={alerts} 
-          onClearAlerts={handleClearAlerts} 
-          mailCount={mailCount} 
-          onClearMails={handleClearMails} 
-          highContrast={highContrast} 
-          setHighContrast={setHighContrast} 
+    <div
+      style={{
+        display: 'flex',
+        height: '100vh',
+        background: bgGradient,
+        color: 'white',
+        fontFamily: 'Inter, sans-serif',
+        overflow: 'hidden'
+      }}
+    >
+      <Sidebar
+        activeSection={activeSection}
+        onNavigate={handleNavigate}
+        userEmail={userEmail}
+        userRole={userRole}
+        onLogout={onLogout}
+        highContrast={highContrast}
+      />
+
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          position: 'relative'
+        }}
+      >
+        <Header
+          activeSection={activeSection}
+          alerts={alerts}
+          onClearAlerts={handleClearAlerts}
+          mailCount={mailCount}
+          onClearMails={handleClearMails}
+          highContrast={highContrast}
+          setHighContrast={setHighContrast}
           onLogout={onLogout}
         />
-        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '2rem', position: 'relative' }}>
+
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            paddingBottom: '2rem',
+            position: 'relative'
+          }}
+        >
           {renderContent()}
         </div>
-        <Chatbot highContrast={highContrast} onTriggerSimulation={handleRunBatch} />
+
+        <Chatbot
+          highContrast={highContrast}
+          onTriggerSimulation={handleRunBatch}
+        />
       </main>
     </div>
   );
 };
 
 export default Dashboard;
+
