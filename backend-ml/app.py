@@ -247,13 +247,15 @@ def send_fraud_alert_email(receiver_email, transaction_details):
         return False
 
 # MySQL Configuration
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'shivathmika@26',
-    'database': 'frauddb'
-}
 
+db_config = {
+    'host': os.environ.get('DB_HOST'),
+    'user': os.environ.get('DB_USER'),
+    'password': os.environ.get('DB_PASSWORD'),
+    'database': 'frauddb',
+    'port': int(os.environ.get('DB_PORT', 3306)),
+    'ssl_ca': os.environ.get('DB_SSL_CA')
+}
 def get_db_connection():
     try:
         connection = mysql.connector.connect(**db_config)
