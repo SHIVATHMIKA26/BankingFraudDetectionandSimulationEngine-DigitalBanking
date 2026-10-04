@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import MLModelStatus from './MLModelStatus';
@@ -12,7 +12,6 @@ import AuditLogsView from './AuditLogsView';
 import SettingsView from './SettingsView';
 import Chatbot from './Chatbot';
 import axios from 'axios';
-import React, { useEffect, useCallback } from "react";
 
 const Dashboard = ({ userEmail, userRole, onLogout }) => {
   const [activeSection, setActiveSection] = useState('Dashboard');
