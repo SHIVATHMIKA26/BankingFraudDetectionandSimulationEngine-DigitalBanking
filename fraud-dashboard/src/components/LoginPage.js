@@ -7,7 +7,7 @@ const LoginPage = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const API_URL = https://bankingfrauddetectionandsimulationengine.onrender.com;
+  const API_URL = "https://bankingfrauddetectionandsimulationengine.onrender.com";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
