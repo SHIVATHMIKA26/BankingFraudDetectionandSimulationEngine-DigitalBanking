@@ -1,5 +1,5 @@
 import React from 'react';
-import { Line, Pie, Radar, Doughnut } from 'react-chartjs-2';
+import { Line, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,7 +13,6 @@ import {
   ArcElement,
   RadialLinearScale
 } from 'chart.js';
-
 ChartJS.register(
   CategoryScale,
   LinearScale,
